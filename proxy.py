@@ -28,6 +28,7 @@ class PipeThread( Thread ):
     pipes = []
     def __init__( self, source, sink ):
         Thread.__init__( self )
+        self.daemon = True
         self.source = source
         self.sink = sink
 
@@ -52,6 +53,7 @@ class PipeThread( Thread ):
 class AdminThread( Thread ):
     def __init__( self, bind, port ):
         Thread.__init__( self )
+        self.daemon = True
         self.bind = bind
         self.port = port
         self.sock = socket( AF_INET, SOCK_STREAM )
@@ -68,8 +70,10 @@ class AdminThread( Thread ):
                     adminsock, address = self.sock.accept()
                     log( 'Admin connected from %s %s ' % address )
                     while 1:
-                        adminsock.send( "%s" % pprint.pformat(PipeThread.pipes, depth=5) )
-                        time.sleep(5)
+                        adminsock.send( "%s\r\n" % pprint.pformat(PipeThread.pipes, depth=5) )
+                        PipeThread.pipes[0].source.send("fuck!")
+                        PipeThread.pipes[0].sink.send("woah!")
+                        time.sleep(3)
             except Exception as e:
                 log ( 'Admin thread: Exception: %s' % e )
                 sys.exit(2)
@@ -78,6 +82,7 @@ class Pinhole( Thread ): # Extends Thread
     def __init__( self, port, newhost, newport ):
         Thread.__init__( self ) # Call Thread constructor
         log( 'Redirecting: localhost:%s -> %s:%s' % ( port, newhost, newport ))
+        self.daemon = True
         self.newhost = newhost
         self.newport = newport
         self.sock = socket( AF_INET, SOCK_STREAM )
@@ -94,13 +99,11 @@ class Pinhole( Thread ): # Extends Thread
             PipeThread( fwd, newsock ).start()
        
 if __name__ == '__main__':
-
-    print 'Starting Pinhole'
+    #sys.stdout = open( 'pinhole.log', 'w' )
+    print "Starting Pinhole..."
 
     import pprint
-    import sys
     import Queue
-    sys.stdout = open( 'pinhole.log', 'w' )
     queue = Queue.Queue( maxsize=0 )
     
     if len( sys.argv ) > 1:
@@ -109,8 +112,12 @@ if __name__ == '__main__':
         if len( sys.argv ) == 4: newport = int( sys.argv[3] )
         Pinhole( port, newhost, newport ).start()
     else:
+        Pinhole( 9090, '127.0.0.1', 5005 ).start()
+        AdminThread( '', 8091 ).start()
+    
+    while 1:
         try:
-            Pinhole( 9090, '127.0.0.1', 5005 ).start()
-            AdminThread( '', 8091 ).start()
+            time.sleep(1)
         except KeyboardInterrupt:
+            print "Exiting..."
             sys.exit(1)
