@@ -11,8 +11,7 @@ s.bind((TCP_IP, TCP_PORT))
 s.listen(1)
 
 conn, addr = s.accept()
-addr = '.'.join(map(str,addr)) # stringify
-sys.stdout.write("Connection address: %s" % addr)
+sys.stdout.write("Connection address: %s:%s" % addr)
 sys.stdout.flush()
 while 1:
     data = conn.recv(BUFFER_SIZE)

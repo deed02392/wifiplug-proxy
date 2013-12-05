@@ -54,14 +54,22 @@ class AdminThread( Thread ):
         Thread.__init__( self )
         self.bind = bind
         self.port = port
+        self.sock = socket( AF_INET, SOCK_STREAM )
+        self.sock.bind(( bind, port ))
+        self.sock.listen(1)
         
-        log( "Creating admin thread: %s:%s" % \
+        log( "Starting admin thread: %s:%s" % \
             ( bind, port ))
     
     def run( self ): # Thread execution payload
         while 1:
             try:
-                # Process admin commands
+                while 1:
+                    adminsock, address = self.sock.accept()
+                    log( 'Admin connected from %s %s ' % address )
+                    while 1:
+                        adminsock.send( "%s" % pprint.pformat(PipeThread.pipes, depth=5) )
+                        time.sleep(5)
             except Exception as e:
                 log ( 'Admin thread: Exception: %s' % e )
                 sys.exit(2)
@@ -89,8 +97,11 @@ if __name__ == '__main__':
 
     print 'Starting Pinhole'
 
+    import pprint
     import sys
+    import Queue
     sys.stdout = open( 'pinhole.log', 'w' )
+    queue = Queue.Queue( maxsize=0 )
     
     if len( sys.argv ) > 1:
         port = newport = int( sys.argv[1] )
@@ -98,4 +109,8 @@ if __name__ == '__main__':
         if len( sys.argv ) == 4: newport = int( sys.argv[3] )
         Pinhole( port, newhost, newport ).start()
     else:
-        Pinhole( 9090, '127.0.0.1', 5005 ).start()
+        try:
+            Pinhole( 9090, '127.0.0.1', 5005 ).start()
+            AdminThread( '', 8091 ).start()
+        except KeyboardInterrupt:
+            sys.exit(1)
