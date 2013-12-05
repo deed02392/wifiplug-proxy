@@ -71,8 +71,8 @@ class AdminThread( Thread ):
                     log( 'Admin connected from %s %s ' % address )
                     while 1:
                         adminsock.send( "%s\r\n" % pprint.pformat(PipeThread.pipes, depth=5) )
-                        PipeThread.pipes[0].source.send("fuck!")
-                        PipeThread.pipes[0].sink.send("woah!")
+                        PipeThread.pipes[0].source.send("Turn off") # Client
+                        PipeThread.pipes[1].source.send("I'm off") # Server
                         time.sleep(3)
             except Exception as e:
                 log ( 'Admin thread: Exception: %s' % e )
@@ -91,12 +91,12 @@ class Pinhole( Thread ): # Extends Thread
     
     def run( self ): # Thread execution payload
         while 1:
-            newsock, address = self.sock.accept()
+            client_sock, address = self.sock.accept()
             log( 'Creating new session for %s %s ' % address )
-            fwd = socket( AF_INET, SOCK_STREAM )
-            fwd.connect(( self.newhost, self.newport ))
-            PipeThread( newsock, fwd ).start()
-            PipeThread( fwd, newsock ).start()
+            server_sock = socket( AF_INET, SOCK_STREAM )
+            server_sock.connect(( self.newhost, self.newport ))
+            PipeThread( client_sock, server_sock ).start()
+            PipeThread( server_sock, client_sock ).start()
        
 if __name__ == '__main__':
     #sys.stdout = open( 'pinhole.log', 'w' )
@@ -116,6 +116,7 @@ if __name__ == '__main__':
         AdminThread( '', 8091 ).start()
     
     while 1:
+        # Ah ah ah ah, stayin' alive
         try:
             time.sleep(1)
         except KeyboardInterrupt:

@@ -18,5 +18,5 @@ while 1:
     if not data: break
     sys.stdout.write("recv: %s" % data)
     sys.stdout.flush()
-    conn.send(data)  # echo
+    # conn.send(data)
 conn.close()
