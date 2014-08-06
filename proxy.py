@@ -35,26 +35,32 @@ class PipeThread( Thread ):
             try:
                 data = self.source.recv( 1024 )
                 if not data: break
-                if not self.sourcetype == 'server':
-                    self.plug = wifiplug.Wifiplug('', '', data)
-                    if self.plug.serial and (len(self.plug.serial) == 12):
-                        for pipe in self.pipes:
-                            if pipe.plug and pipe.plug.serial == self.plug.serial:
-                                # Dead connection needs resetting
-                                pipe.stop()
-                        self.sourcetype = 'plug'
-                        while 1:
-                            try:
-                                data = self.source.recv(1024)
-                                if not data: break
-                                self.plug.decode(data)
-                                self.sink.send(data)
-                            except:
-                                break
+                log(data)
+                # Determine source type
+                if self.sourcetype == 'unknown':
+                    # Is it a plug?
+                    
+                    if not self.sourcetype == 'server':
+                        self.plug = wifiplug.Wifiplug('', '', data)
+                        if self.plug.serial and (len(self.plug.serial) == 12):
+                            for pipe in self.pipes:
+                                if pipe.plug and pipe.plug.serial == self.plug.serial:
+                                    # Dead connection needs resetting
+                                    pipe.stop()
+                            self.sourcetype = 'plug'
+                            while 1:
+                                try:
+                                    data = self.source.recv(1024)
+                                    if not data: break
+                                    self.plug.decode(data)
+                                    self.sink.send(data)
+                                except:
+                                    break
+                        else:
+                            self.sourcetype = 'server'
                     else:
-                        self.sourcetype = 'server'
-                else:
-                    self.sink.send(data)
+                        self.sink.send(data)
+            
             except Exception as e:
                 log('pipe exception: %s' % e)
 
@@ -68,7 +74,7 @@ class PipeThread( Thread ):
 class Pinhole( Thread ): # Extends Thread
     def __init__( self, port, newhost, newport ):
         Thread.__init__( self ) # Call Thread constructor
-        log( 'ecting: 0.0.0.0:%s -> %s:%s' % ( port, newhost, newport ))
+        log( 'Redirecting: 0.0.0.0:%s -> %s:%s' % ( port, newhost, newport ))
         self.daemon = True
         self.newhost = newhost
         self.newport = newport
