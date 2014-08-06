@@ -1,21 +1,10 @@
-"""
-usage 'pinhole port host [newport]'
-
-Pinhole forwards the port to the host specified.
-The optional newport parameter may be used to
-redirect to a different port.
-
-eg. pinhole 80 webserver
-    Forward all incoming WWW sessions to webserver.
-
-    pinhole 23 localhost 2323
-    Forward all telnet sessions to port 2323 on localhost.
-"""
-
 import sys
 from socket import *
 from threading import Thread
+import threading
+from flask import Flask
 import time
+import inspect
 
 LOGGING = 1
 
@@ -24,14 +13,18 @@ def log( s ):
         print '%s:%s' % ( time.ctime(), s )
         sys.stdout.flush()
 
+plugs = []
+
 class PipeThread( Thread ):
     pipes = []
     def __init__( self, source, sink ):
         Thread.__init__( self )
+        self._stop = threading.Event()
         self.daemon = True
         self.source = source
         self.sink = sink
-
+        self.sourcetype = 'unknown'
+        
         log( 'Creating new pipe thread  %s ( %s -> %s )' % \
             ( self, source.getpeername(), sink.getpeername() ))
         PipeThread.pipes.append( self )
@@ -42,46 +35,40 @@ class PipeThread( Thread ):
             try:
                 data = self.source.recv( 1024 )
                 if not data: break
-                self.sink.send( data )
-            except:
-                break
+                if not self.sourcetype == 'server':
+                    self.plug = wifiplug.Wifiplug('', '', data)
+                    if self.plug.serial and (len(self.plug.serial) == 12):
+                        for pipe in self.pipes:
+                            if pipe.plug and pipe.plug.serial == self.plug.serial:
+                                # Dead connection needs resetting
+                                pipe.stop()
+                        self.sourcetype = 'plug'
+                        while 1:
+                            try:
+                                data = self.source.recv(1024)
+                                if not data: break
+                                self.plug.decode(data)
+                                self.sink.send(data)
+                            except:
+                                break
+                    else:
+                        self.sourcetype = 'server'
+                else:
+                    self.sink.send(data)
+            except Exception as e:
+                log('pipe exception: %s' % e)
 
         log( '%s terminating' % self )
         PipeThread.pipes.remove( self )
         log( '%s pipes active' % len( PipeThread.pipes ))
-
-class AdminThread( Thread ):
-    def __init__( self, bind, port ):
-        Thread.__init__( self )
-        self.daemon = True
-        self.bind = bind
-        self.port = port
-        self.sock = socket( AF_INET, SOCK_STREAM )
-        self.sock.bind(( bind, port ))
-        self.sock.listen(1)
-        
-        log( "Starting admin thread: %s:%s" % \
-            ( bind, port ))
     
-    def run( self ): # Thread execution payload
-        while 1:
-            try:
-                while 1:
-                    adminsock, address = self.sock.accept()
-                    log( 'Admin connected from %s %s ' % address )
-                    while 1:
-                        adminsock.send( "%s\r\n" % pprint.pformat(PipeThread.pipes, depth=5) )
-                        PipeThread.pipes[0].source.send("Turn off") # Client
-                        PipeThread.pipes[1].source.send("I'm off") # Server
-                        time.sleep(3)
-            except Exception as e:
-                log ( 'Admin thread: Exception: %s' % e )
-                sys.exit(2)
+    def stop(self):
+        self._stop.set()
 
 class Pinhole( Thread ): # Extends Thread
     def __init__( self, port, newhost, newport ):
         Thread.__init__( self ) # Call Thread constructor
-        log( 'Redirecting: localhost:%s -> %s:%s' % ( port, newhost, newport ))
+        log( 'ecting: 0.0.0.0:%s -> %s:%s' % ( port, newhost, newport ))
         self.daemon = True
         self.newhost = newhost
         self.newport = newport
@@ -92,28 +79,53 @@ class Pinhole( Thread ): # Extends Thread
     def run( self ): # Thread execution payload
         while 1:
             client_sock, address = self.sock.accept()
-            log( 'Creating new session for %s %s ' % address )
+            log( 'Creating new session for %s:%s ' % address )
             server_sock = socket( AF_INET, SOCK_STREAM )
             server_sock.connect(( self.newhost, self.newport ))
             PipeThread( client_sock, server_sock ).start()
             PipeThread( server_sock, client_sock ).start()
-       
+
 if __name__ == '__main__':
     #sys.stdout = open( 'pinhole.log', 'w' )
     print "Starting Pinhole..."
 
     import pprint
     import Queue
+    import wifiplug
     queue = Queue.Queue( maxsize=0 )
+    flask = Flask(__name__)
     
-    if len( sys.argv ) > 1:
-        port = newport = int( sys.argv[1] )
-        newhost = sys.argv[2]
-        if len( sys.argv ) == 4: newport = int( sys.argv[3] )
-        Pinhole( port, newhost, newport ).start()
-    else:
-        Pinhole( 9090, '127.0.0.1', 5005 ).start()
-        AdminThread( '', 8091 ).start()
+    @flask.route('/toggle')
+    def toggle():
+        for pipe in PipeThread.pipes:
+            if pipe.sourcetype == 'plug':
+                client = pipe
+            elif pipe.sourcetype == 'server':
+                server = pipe
+        if client.plug.state == 'ON':
+            client.source.send(wifiplug.SERVER_TURN_OFF) # To Client
+            server.source.send(wifiplug.CLIENT_STATUS_OFF) # To Server
+        else:
+            client.source.send(wifiplug.SERVER_TURN_ON) # To Client
+            server.source.send(wifiplug.CLIENT_STATUS_ON) # To Server
+        return "ok"
+    
+    @flask.route('/pipes')
+    def list_pipes():
+        str = ''
+        for pipe in PipeThread.pipes:
+            str += "%s\r\n" % pprint.pformat(inspect.getmembers(pipe), depth=5)
+        return str
+    @flask.route('/plugs')
+    def list_plugs():
+        str = ''
+        for pipe in PipeThread.pipes:
+            if pipe.sourcetype == 'plug':
+                str += "%s\r\n" % pprint.pformat(inspect.getmembers(pipe.plug), depth=5)
+        return str
+
+    Pinhole( 221, '54.217.214.117', 221 ).start()
+    flask.run(host='0.0.0.0')
     
     while 1:
         # Ah ah ah ah, stayin' alive
