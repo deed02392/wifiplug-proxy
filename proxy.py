@@ -95,29 +95,21 @@ if __name__ == '__main__':
     def toggle():
         for pipe in PipeThread.pipes:
             if pipe.sourcetype == 'plug':
-                client = pipe
-            elif pipe.sourcetype == 'server':
-                server = pipe
-        if client.plug.state == 'ON':
-            client.source.send(wifiplug.SERVER_TURN_OFF) # To Client
-            server.source.send(wifiplug.CLIENT_STATUS_OFF) # To Server
-        else:
-            client.source.send(wifiplug.SERVER_TURN_ON) # To Client
-            server.source.send(wifiplug.CLIENT_STATUS_ON) # To Server
+                if pipe.status == 'plug on':
+                    pipe.source.send("BBBB4,0EEEE")
+                else:
+                    pipe.source.send("BBBB4,1EEEE")
+                    
         return "ok"
     
     @flask.route('/pipes')
     def list_pipes():
-        str = ''
+        count = 1
+        str = '<pre>'
         for pipe in PipeThread.pipes:
-            str += "%s\r\n" % pprint.pformat(inspect.getmembers(pipe), depth=5)
-        return str
-    @flask.route('/plugs')
-    def list_plugs():
-        str = ''
-        for pipe in PipeThread.pipes:
-            if pipe.sourcetype == 'plug':
-                str += "%s\r\n" % pprint.pformat(inspect.getmembers(pipe.plug), depth=5)
+            str += "Pipe num: %i" % count
+            str += "  %s - (%s, %s)\r\n" % (pipe.sourcetype, pipe.last_msg_type, pipe.last_msg_value)
+            count += 1
         return str
 
     Pinhole( 221, '54.217.214.117', 221 ).start()
