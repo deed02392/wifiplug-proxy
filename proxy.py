@@ -5,6 +5,7 @@ import threading
 from flask import Flask
 import time
 import inspect
+from wifiplug import WifiplugPacket
 
 LOGGING = 1
 
@@ -24,6 +25,9 @@ class PipeThread( Thread ):
         self.source = source
         self.sink = sink
         self.sourcetype = 'unknown'
+        self.status = ''
+        self.last_msg_type = ''
+        self.last_msg_value = ''
         
         log( 'Creating new pipe thread  %s ( %s -> %s )' % \
             ( self, source.getpeername(), sink.getpeername() ))
@@ -36,30 +40,16 @@ class PipeThread( Thread ):
                 data = self.source.recv( 1024 )
                 if not data: break
                 log(data)
-                # Determine source type
-                if self.sourcetype == 'unknown':
-                    # Is it a plug?
-                    
-                    if not self.sourcetype == 'server':
-                        self.plug = wifiplug.Wifiplug('', '', data)
-                        if self.plug.serial and (len(self.plug.serial) == 12):
-                            for pipe in self.pipes:
-                                if pipe.plug and pipe.plug.serial == self.plug.serial:
-                                    # Dead connection needs resetting
-                                    pipe.stop()
-                            self.sourcetype = 'plug'
-                            while 1:
-                                try:
-                                    data = self.source.recv(1024)
-                                    if not data: break
-                                    self.plug.decode(data)
-                                    self.sink.send(data)
-                                except:
-                                    break
-                        else:
-                            self.sourcetype = 'server'
-                    else:
-                        self.sink.send(data)
+                # Determine source type by analysing packet
+                packet = wifiplug.WifiplugPacket(data)
+                self.sourcetype = packet.device_type
+                self.last_msg_type = packet.msg_type
+                self.last_msg_value = packet.msg_value
+                
+                if self.sourcetype == 'plug' and self.last_msg_type == '3':
+                    self.status = self.last_msg_value
+                
+                self.sink.send(data)
             
             except Exception as e:
                 log('pipe exception: %s' % e)
