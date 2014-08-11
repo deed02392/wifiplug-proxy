@@ -139,4 +139,9 @@ if __name__ == '__main__':
             time.sleep(1)
         except KeyboardInterrupt:
             print "Exiting..."
+            for pipe in PipeThread.pipes:
+                pipe.source.shutdown(SHUT_RDWR)
+                pipe.source.close()
+                pipe.sink.shutdown(SHUT_RDWR)
+                pipe.sink.close()
             sys.exit(1)
