@@ -33,6 +33,7 @@ class WifiplugPacket():
     #  @param data String containing packet payload
     #  @return 
     def __init__(self, data):
+        data = data.strip()
         self.device_type = 'unknown'
         self.data = data
         self.msg_type = ''
@@ -43,23 +44,22 @@ class WifiplugPacket():
         
         self.msg_type = self.get_message_type(data)
         
-        if msg_type == '+':
+        if self.msg_type == '+':
             self.device_type = 'server'
             self.msg_value = self.get_server_msg(data)
-        elif msg_type == '1':
+        elif self.msg_type == '1':
             self.device_type = 'plug'
             self.msg_value = self.get_registration(data)
-        elif msg_type == '3':
+        elif self.msg_type == '3':
             self.device_type = 'plug'
             self.msg_value = self.get_client_status(data)
-        elif msg_type == '4':
+        elif self.msg_type == '4':
             self.device_type = 'server'
             self.msg_value = self.get_server_command(data)
         else:
             raise Exception("Logic error: a valid message type has no parse handler")
     
     def validate_data(self, data):
-        data = data.strip()
         if not data.startswith(MESSAGE_PREFIX):
             return False
         if not data.endswith(MESSAGE_SUFFIX):
